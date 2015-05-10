@@ -8,6 +8,9 @@ extern int Mem[1000000] = { 0 };
 extern int Hi, Lo = 0;
 enum regNum { zero, at, v0, v1, a0, a1, a2, a3, t0, t1, t2, t3, t4, t5, t6, t7, s0, s1, s2, s3, s4, s5, s6, s7, t8, t9, k0, k1, gp, sp, fp, ra };
 //s8 == fp
+int PCSrc = 0;
+
+
 void swapbit(int* ptr); //윈도우에서 거꾸로 읽는 것을 원래대로 만들어줌.
 void Memory_print();
 
@@ -124,6 +127,7 @@ void Instruction_Decode(IF_ID* if_id, ID_EX* id_ex){
 		id_ex->rs_data = reg[rs];
 		id_ex->rt_data = reg[rt];
 		id_ex->SignExt = SignExtImm(immediate);
+		id_ex->immediate = immediate;
 		id_ex->rt_address = rt;
 		id_ex->rd_address = rd;
 		id_ex->sh = shamt;
@@ -140,82 +144,117 @@ void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem){
 		switch (id_ex->sh){
 		case 0x20:
 			ex_mem->ALU_result = id_ex->rs_data + id_ex->rt_data;  //Add
+			ex_mem->address = id_ex->rd_address;
 			break;
 		case 0x21: 
 			if (id_ex->rt_data == 0){
-				ex_mem->rd_address = id_ex->rs_data; //Move
+				ex_mem->ALU_result = id_ex->rs_data; //Move
+				ex_mem->address = id_ex->rd_address;
 			}
 			else {
 				ex_mem->ALU_result = id_ex->rs_data + id_ex->rt_data; //Add Unsigned
+				ex_mem->address = id_ex->rd_address;
 			}
 			break;
 		case 0x24:
 			ex_mem->ALU_result = id_ex->rs_data & id_ex->rt_data;  //And
+			ex_mem->address = id_ex->rd_address;
 			break;
 		case 0x08:
-			Jump_Register(rs); //Jump_Register부터 고치기
+			Jump_Register(); /////////////////////////////////////////////////////Jump_Register 수정
 			break;
 		case 0x27:
-			Nor(rd, rs, rt);
+			ex_mem->ALU_result = ~(id_ex->rs_data | id_ex->rt_data); //Nor
+			ex_mem->address = id_ex->rd_address;
+
 			break;
 		case 0x25:
-			Or(rd, rs, rt);
+			ex_mem->ALU_result = id_ex->rs_data | id_ex->rt_data; //Or
+			ex_mem->address = id_ex->rd_address;
 			break;
 		case 0x2a:
-			Set_Less_Than(rd, rs, rt);
+			ex_mem->rt_data = (id_ex->rs_data < id_ex->rt_data) ? 1 : 0; // Set_Less_Than
+			ex_mem->address = id_ex->rt_address;
 			break;
 		case 0x2b:
-			Set_Less_Than_Imm_Unsigned(rd, rs, rt);
+			ex_mem->rt_data = (id_ex->rs_data < id_ex->SignExt) ? 1 : 0; // Set_Less_Than_Imm_Unsigned
+			ex_mem->address = id_ex->rt_address;
 			break;
 		case 0x00:
-			Shift_Left_Logical(rd, rt, sh);
+			ex_mem->ALU_result = id_ex->rt_data << id_ex->sh; //Shift_Left_Logical
+			ex_mem->address = id_ex->rd_address;
 			break;
 		case 0x02:
-			Shith_Right_Logical(rd, rt, sh);
+			ex_mem->ALU_result = id_ex->rt_data >> id_ex->sh; //Shift_Right_Logical
+			ex_mem->address = id_ex->rd_address;
 			break;
 		case 0x22:
-			Substract(rd, rs, rt);
+			ex_mem->ALU_result = id_ex->rs_data - id_ex->rt_data; //Subtract
+			ex_mem->address = id_ex->rd_address;
 			break;
 		case 0x23:
-			Substract_Unsigned(rd, rs, rt);
+			ex_mem->ALU_result = id_ex->rs_data - id_ex->rt_data; //Subtract_Unsigned
+			ex_mem->address = id_ex->rd_address;
 			break;
 		case 0x10:
-			Move_From_Hi(rd);
+			ex_mem->ALU_result = Hi; //Move_From_Hi
+			ex_mem->address = id_ex->rd_address;
 			break;
 		case 0x12:
-			Move_From_Low(rd);
+			ex_mem->ALU_result = Lo; //Move_From_Low
+			ex_mem->address = id_ex->rd_address;
 			break;
 		case 0x18:
-			Multiply(rs, rt);
+			Hi = ((id_ex->rs_data * id_ex->rt_data) & 0xFFFFFFFF00000000) >> 32; //Multiply
+			Lo = ((id_ex->rs_data * id_ex->rt_data) & 0x00000000FFFFFFFF);
 			break;
 		case 0x19:
-			Multiply_Unsigned(rs, rt);
+			Hi = ((id_ex->rs_data * id_ex->rt_data) & 0xFFFFFFFF00000000) >> 32; //Multiply_Unsigned
+			Lo = ((id_ex->rs_data * id_ex->rt_data) & 0x00000000FFFFFFFF);
 			break;
 //		case 0x03:
-//			Shift_Right_Arith(rd, rt, sh);
-
+//			ex_mem->ALU_result = id_ex->rt_data >>> id_ex->sh; //Shift_Right_Arith
+//			ex_mem->address = id_ex->rd_address;
 		}
 		break;
 	case 0x08:
-		Add_Immediate(rs, rt, immediate);
+		ex_mem->rt_data = id_ex->rs_data & id_ex->SignExt; //Add_immediate
+		ex_mem->address = id_ex->rt_address;
 		break;
 	case 0x09:
-		if (rs != 0){
-			Add_Imm_Unsigned(rs, rt, immediate);
+		if (id_ex->rs_data != 0){
+			ex_mem->rt_data = id_ex->rs_data & id_ex->SignExt; //Add_imm_Unsigned
+			ex_mem->address = id_ex->rt_address;
 		}
-		else Load_Immediate(rt, immediate);
+		else{
+			ex_mem->rt_data = id_ex->immediate; //Load_Immediate
+			ex_mem->address = id_ex->rt_address;
+		}
 		break;
 	case 0x0c:
-		And_Immediate(rs, rt, immediate);
+		ex_mem->rt_data = id_ex->rs_data & id_ex->immediate; //And_Immediate
+		ex_mem->address = id_ex->rt_address;
+
 		break;
 	case 0x04:
-		Branch_On_Equal(rs, rt, immediate);
+		if (id_ex->rs_data == id_ex->rt_data){ //Branch_On_Equal
+			ex_mem->PC = ex_mem->PC + 1 + (id_ex->SignExt / 4);
+			PCSrc = 1;
+		}
 		break;
 	case 0x05:
-		if (rt != 0){
-			Branch_On_Not_Equal(rs, rt, immediate);
-		}else Branch_On_Not_Equal_Zero(rs, immediate);
-
+		if (id_ex->rt_data != 0){
+			if (id_ex->rs_data != id_ex->rt_data){ //Branch_On_Not_Equal
+				ex_mem->PC = ex_mem->PC + 1 + (id_ex->SignExt / 4);
+				PCSrc = 1;
+			}
+		}
+		else{
+			if (id_ex->rs_data != 0){ //Branch_On_Not_Equl_Zero
+				ex_mem->PC = ex_mem->PC + 1 + (id_ex->SignExt / 4);
+				PCSrc = 1;
+			}
+		}
 		break;
 	case 0x02:
 		Jump(address);

@@ -44,7 +44,7 @@ int Add(int rs, int rt){
 }
 
 void Add_Immediate(int rs, int rt, int imm){
-	reg[rt] = reg[rs] & imm;
+	reg[rt] = reg[rs] + SignExtImm(imm);
 }
 
 

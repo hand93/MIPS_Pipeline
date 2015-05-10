@@ -11,6 +11,7 @@ typedef struct ID_EX{
 	int opcode;
 	int rs_data;
 	int rt_data;
+	int immediate;
 	int SignExt;
 	int rt_address;
 	int rd_address;
@@ -22,8 +23,8 @@ typedef struct EX_MEM{
 	int* PC;
 	int blanch_address;
 	int ALU_result;
-	int data2;
-	int rd_address;
+	int rt_data;
+	int address;
 }EX_MEM;
 
 typedef struct MEM_WB{

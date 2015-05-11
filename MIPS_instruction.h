@@ -11,10 +11,11 @@ typedef struct ID_EX{
 	int opcode;
 	int rs_data;
 	int rt_data;
+	int r31_data; //Jump And Link¸¦ À§ÇØ
 	int immediate;
 	int SignExt;
-	int rt_address;
-	int rd_address;
+	int rt_rd_address;
+	int j_address;
 	int sh;
 	int func;
 }ID_EX;

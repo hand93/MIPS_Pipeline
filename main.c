@@ -28,6 +28,7 @@ void Instruction_Fetch(FILE* pFile, IF_ID* if_id);
 void Instruction_Decode(IF_ID* if_id, ID_EX* id_ex);
 void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem);
 void Memory(EX_MEM* ex_mem, MEM_WB* mem_wb);
+void Write_Back(MEM_WB* mem_wb);
 
 
 //input output latch를 배열로 두개씩 만들어 놓았다.
@@ -93,7 +94,7 @@ int main(){
 	EX_MEM* ex_mem;
 	MEM_WB* mem_wb;
 
-	spData = fopen("fibo.bin", "r");
+	spData = fopen("temp.bin", "r");
 
 	if(spData==NULL){
 		printf("Could not open the file.\n");
@@ -173,8 +174,7 @@ void Instruction_Decode(IF_ID* if_id, ID_EX* id_ex){
 
 
 	//Control
-	switch (opcode){
-	case 0:
+	if(opcode == 0){
 		switch (shamt)
 		{
 		case 0x20:
@@ -190,26 +190,20 @@ void Instruction_Decode(IF_ID* if_id, ID_EX* id_ex){
 		case 0x12:
 			regDst = 1; //rd
 			break;
-		case 0x2a:
-		case 0x2b:
-			regDst = 0; //rt
-			break;
 		}
-	case 0x08:
-	case 0x09:
-	case 0x0c:
-	case 0x30:
-	case 0x0f:
-	case 0x23:
-	case 0x0d:
-		regDst = 0; //rt
-		break;
+	}
+	else if ((opcode == Load_Word) || (opcode == Load_Byte_Unsigned) || (opcode == Load_FP) || (opcode == Load_FP_Single) || (opcode == Load_Linked) || (opcode == Load_Upper_Imm)){
+		memRead = 1;
+		memtoReg = 1;
+	}
+	else if ((opcode == Store_Word) || (opcode == Store_Byte) || (opcode == Store_Conditional) || (opcode == Store_FP) || (opcode == Store_FP_Single) || (opcode == Store_Halfword)){
+		memWrite = 1;
 	}
 
 
-	if (inst == 0x00000000){
-		printf("nop\n");
-	}else{
+	//if (inst == 0x00000000){
+	//	printf("nop\n");
+	//}else{
 		id_ex->opcode = opcode;
 		id_ex->rs_data = reg[rs];
 		id_ex->rt_data = reg[rt];
@@ -223,13 +217,14 @@ void Instruction_Decode(IF_ID* if_id, ID_EX* id_ex){
 		id_ex->j_address = Instruction_Memory + (JumpAddr(address) / 4);
 		id_ex->sh = shamt;
 		id_ex->func = funct;
-	}
+	//}
 
 }
 
 void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem){
 
 	ex_mem->PC = id_ex->PC;
+	ex_mem->rt_data = id_ex->rt_data;
 	ex_mem->address = id_ex->rt_rd_address;
 
 	int ALU_input;
@@ -343,7 +338,7 @@ void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem){
 		jump = 1;
 		break;
 	case Load_Halfword_Unsigned:
-		ex_mem->ALU_result = id_ex->rs_data + id_ex->SignExt; 
+		ex_mem->ALU_result = id_ex->rs_data + id_ex->SignExt;
 //		reg[rt] = Mem[(reg[rs] + SignExtImm(imm))];    Memory 단계에서..
 		break;
 	case Load_Linked:
@@ -375,15 +370,31 @@ void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem){
 		break;
 	case Store_Word:
 		ex_mem->ALU_result = id_ex->rs_data + id_ex->SignExt;
-		//Mem[(reg[rs] + SignExtImm(imm))] = reg[rt]; Memory 단계에서..
+//		Mem[(reg[rs] + SignExtImm(imm))/4] = reg[rt]; Memory 단계에서..
 		break;
 	}
 }
 
 void Memory(EX_MEM* ex_mem, MEM_WB* mem_wb){
 	
+	mem_wb->address = ex_mem->address;
 
+	if (memWrite == 1){
+		Mem[ex_mem->ALU_result] = ex_mem->rt_data;
+	}
+	else if (memRead == 1){
+		mem_wb->data = Mem[ex_mem->ALU_result];
+	}
+	else if (memtoReg == 0){
+		mem_wb->data = ex_mem->ALU_result;
+	}
+	
 }
+
+void Write_Back(MEM_WB* mem_wb){
+	reg[mem_wb->address] = mem_wb->data;
+}
+
 
 
 

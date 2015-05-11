@@ -1,4 +1,4 @@
-#include "MIPS_instruction.h"
+/*#include "MIPS_instruction.h"
 
 int Instruction_Memory[(0x100000 / 4)];
 int* PC;
@@ -215,9 +215,9 @@ void Multiply_Unsigned(int rs, int rt){
 	Lo = ((reg[rs] * reg[rt]) & 0x00000000FFFFFFFF);
 }
 
-/*void Shift_Right_Arith(int rd, int rt, int shamt){
-	reg[rd] = reg[rt] >>> shamt;
-}*/
+//void Shift_Right_Arith(int rd, int rt, int shamt){
+//	reg[rd] = reg[rt] >>> shamt;
+//}
 
 
 
@@ -234,3 +234,5 @@ void Load_Immediate(int rt, int immediate){
 	reg[rt] = immediate;
 	printf("li	r[%d] = %X\n", rt, immediate);
 }
+
+*/

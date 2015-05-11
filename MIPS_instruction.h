@@ -31,9 +31,10 @@ typedef struct EX_MEM{
 typedef struct MEM_WB{
 	int data;
 	int address;
-	int dest_address;
 }MEM_WB;
 
+
+/*
 int SignExtImm(int imm);
 int BranchAddr(int imm);
 int JumpAddr(int imm);
@@ -97,6 +98,8 @@ void Multiply_Unsigned(int rs, int rt);
 //psedo instruction set
 void Move(int rd, int rs);
 void Load_Immediate(int rt, int immediate);
+
+*/
 
 
 

@@ -15,6 +15,7 @@ typedef struct ID_EX{
 	int immediate;
 	int SignExt;
 	int rt_rd_address;
+	int b_address;
 	int j_address;
 	int sh;
 	int func;
@@ -22,23 +23,25 @@ typedef struct ID_EX{
 
 typedef struct EX_MEM{
 	int* PC;
-	int blanch_address;
+	int j_address;
 	int ALU_result;
 	int rt_data;
 	int address;
 }EX_MEM;
 
 typedef struct MEM_WB{
+	int* PC;
 	int data;
 	int address;
 }MEM_WB;
 
 
-/*
+
 int SignExtImm(int imm);
 int BranchAddr(int imm);
-int JumpAddr(int imm);
+int JumpAddr(int imm, int* PC);
 
+/*
 int Add(int rs, int rt);
 void Add_Immediate(int rs, int rt, int imm);
 void Add_Imm_Unsigned(int rs, int rt, int imm);

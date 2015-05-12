@@ -1,11 +1,14 @@
 /*#include "MIPS_instruction.h"
 
-int Instruction_Memory[(0x100000 / 4)];
+
 int* PC;
 int reg[32];
 int Mem[1000000];
 int Hi, Lo;
+*/
+#include "MIPS_instruction.h"
 
+int Instruction_Memory[(0x100000 / 4)];
 
 int SignExtImm(int imm){
 	int s_bit;
@@ -33,12 +36,12 @@ int BranchAddr(int imm){
 	return SignExtImm(imm) <<2;
 }
 
-int JumpAddr(int address){
+int JumpAddr(int address, int* PC){
 	int i = (PC-&Instruction_Memory[0]) + 4;
 	return (i & (0xF0000000)) | (address<<2);
 }
 
-
+/*
 int Add(int rs, int rt){
 	return reg[rs] + reg[rt];
 }

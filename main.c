@@ -3,9 +3,10 @@
 
 extern int Instruction_Memory[(0x100000 / 4)] = { 0 };
 //extern int* PC = (&Instruction_Memory[0]);
-extern int reg[32] = { 0 };
-extern int Mem[1000000] = { 0 };
-extern int Hi, Lo = 0;
+int reg[32] = { 0 };
+int Mem[1000000] = { 0 };
+int Hi = 0;
+int Lo = 0;
 enum regNum { zero, at, v0, v1, a0, a1, a2, a3, t0, t1, t2, t3, t4, t5, t6, t7, s0, s1, s2, s3, s4, s5, s6, s7, t8, t9, k0, k1, gp, sp, fp, ra };
 //s8 == fp
 
@@ -20,11 +21,12 @@ int ALUop = 0;
 int memWrite = 0;
 //int ALUSrc = 0; 
 int regWrite = 0;
+int bcond = 0;
 
 void swapbit(int* ptr); //윈도우에서 거꾸로 읽는 것을 원래대로 만들어줌.
 void Memory_print();
 
-void Instruction_Fetch(FILE* pFile, IF_ID* if_id);
+void Instruction_Fetch(IF_ID* if_id, ID_EX* id_ex);
 void Instruction_Decode(IF_ID* if_id, ID_EX* id_ex);
 void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem);
 void Memory(EX_MEM* ex_mem, MEM_WB* mem_wb);
@@ -87,18 +89,26 @@ int main(){
 	FILE* spData;
 	reg[sp] = 0x8000;
 	reg[ra] = 0xFFFFFFFF;
-	int i;
+	int i = 0;
 
-	IF_ID* if_id;
-	ID_EX* id_ex;
-	EX_MEM* ex_mem;
-	MEM_WB* mem_wb;
+	IF_ID* if_id = (int *)malloc(sizeof(IF_ID));
+	ID_EX* id_ex = (int *)malloc(sizeof(ID_EX));
+	EX_MEM* ex_mem = (int *)malloc(sizeof(EX_MEM));
+	MEM_WB* mem_wb = (int *)malloc(sizeof(MEM_WB));
 
 	spData = fopen("temp.bin", "r");
 
 	if(spData==NULL){
 		printf("Could not open the file.\n");
 	}
+
+	while (!feof(spData)){
+		fread(Instruction_Memory + i, 4, 1, spData);
+		printf("Instruction[%02d] = %08x ", i, Instruction_Memory[i]);
+		swapbit(Instruction_Memory + i);
+		printf("=> %08x \n", Instruction_Memory[i]);
+		i++;
+	} //Instruction을 가져와서 Instruction Memory에 저장하기
 
 	if_id->PC = (&Instruction_Memory[0]);
 
@@ -140,19 +150,27 @@ void Memory_print(){
 
 
 
-void Instruction_Fetch(FILE* pFile, IF_ID* if_id){
-	int i=0;
-	while( !feof(pFile) ){
-		fread(Instruction_Memory+i,4,1,pFile);
-		printf("Instruction[%02d] = %08x ", i, Instruction_Memory[i]);
-		swapbit(Instruction_Memory+i);
-		printf("=> %08x \n", Instruction_Memory[i]);
-		if_id->instruction = Instruction_Memory[i];
-		i++;
-	}
+void Instruction_Fetch(IF_ID* if_id, ID_EX* id_ex){
 
-	//PC 건들이기
-	//WB stage에서 PC가 0이 되면 종료
+	if_id->instruction = *(if_id->PC);
+	pcSrc1 = jump;
+	pcSrc2 = jump & bcond;
+
+	if (if_id->PC != (&Instruction_Memory[0])){
+		if (pcSrc2 = 1){
+			if_id->PC = id_ex->b_address;
+			pcSrc2 = 0;
+			if (pcSrc1 = 1){
+				if_id->PC = id_ex->j_address;
+				jump = 0;
+				pcSrc1 = 0;
+			}
+		}
+		else if_id->PC += 4;
+	}
+	else if (id_ex->PC == 0){
+		printf("The end");
+	}//WB stage에서 PC가 0이 되면 종료	
 }
 
 void Instruction_Decode(IF_ID* if_id, ID_EX* id_ex){
@@ -201,24 +219,21 @@ void Instruction_Decode(IF_ID* if_id, ID_EX* id_ex){
 	}
 
 
-	//if (inst == 0x00000000){
-	//	printf("nop\n");
-	//}else{
-		id_ex->opcode = opcode;
-		id_ex->rs_data = reg[rs];
-		id_ex->rt_data = reg[rt];
-		id_ex->r31_data = reg[31];
-		id_ex->SignExt = SignExtImm(immediate);
-		id_ex->immediate = immediate;
-		if (regDst == 1){
-			id_ex->rt_rd_address = rd;
-		}
-		else id_ex->rt_rd_address = rt;
-		id_ex->j_address = Instruction_Memory + (JumpAddr(address) / 4);
-		id_ex->sh = shamt;
-		id_ex->func = funct;
-	//}
+	id_ex->opcode = opcode;
+	id_ex->rs_data = reg[rs];
+	id_ex->rt_data = reg[rt];
+	id_ex->r31_data = reg[31];
+	id_ex->immediate = immediate;
+	id_ex->SignExt = SignExtImm(immediate);
 
+	if (regDst == 1){
+		id_ex->rt_rd_address = rd;
+	}
+	else id_ex->rt_rd_address = rt;
+	id_ex->j_address = Instruction_Memory + (JumpAddr(address, if_id->PC) / 4);
+	id_ex->b_address = BranchAddr(immediate);
+	id_ex->sh = shamt;
+	id_ex->func = funct;
 }
 
 void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem){
@@ -309,22 +324,24 @@ void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem){
 
 		break;
 	case Branch_On_Equal:
+		branch = 1;
 		if (id_ex->rs_data == id_ex->rt_data){
 			ex_mem->PC = ex_mem->PC + 1 + (id_ex->SignExt / 4);
-			pcSrc2 = 1;
+			bcond = 1;
 		}
 		break;
 	case 0x5:
+		branch = 1;
 		if (id_ex->rt_data != 0){
 			if (id_ex->rs_data != id_ex->rt_data){ //Branch_On_Not_Equal
 				ex_mem->PC = ex_mem->PC + 1 + (id_ex->SignExt / 4);
-				pcSrc2 = 1;
+				bcond = 1;
 			}
 		}
 		else{
 			if (id_ex->rs_data != 0){ //Branch_On_Not_Equl_Zero
 				ex_mem->PC = ex_mem->PC + 1 + (id_ex->SignExt / 4);
-				pcSrc2 = 1;
+				bcond = 1;
 			}
 		}
 		break;
@@ -377,6 +394,7 @@ void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem){
 
 void Memory(EX_MEM* ex_mem, MEM_WB* mem_wb){
 	
+	mem_wb->PC = ex_mem->PC;
 	mem_wb->address = ex_mem->address;
 
 	if (memWrite == 1){

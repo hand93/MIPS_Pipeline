@@ -112,13 +112,13 @@ int main(){
 
 	if_id[1]->PC = (&Instruction_Memory[0]);
 
-	Instruction_Fetch(if_id[1], id_ex[2]);
-	if_id[2] = if_id[1];
-	Instruction_Decode(if_id[2], id_ex[1]);
-	id_ex[2] = id_ex[1];
-	Instruction_Execution(id_ex[2], ex_mem[1]);
-	ex_mem[2] = ex_mem[1];
-	Memory(ex_mem[2], mem_wb);
+	Instruction_Fetch(if_id[0], id_ex[1]);
+	if_id[1] = if_id[0];
+	Instruction_Decode(if_id[1], id_ex[0]);
+	id_ex[1] = id_ex[0];
+	Instruction_Execution(id_ex[1], ex_mem[0]);
+	ex_mem[1] = ex_mem[0];
+	Memory(ex_mem[1], mem_wb);
 	
 	Memory_print();
 	fclose(spData);

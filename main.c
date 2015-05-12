@@ -91,10 +91,10 @@ int main(){
 	reg[ra] = 0xFFFFFFFF;
 	int i = 0;
 
-	IF_ID* if_id = (int *)malloc(sizeof(IF_ID));
-	ID_EX* id_ex = (int *)malloc(sizeof(ID_EX));
-	EX_MEM* ex_mem = (int *)malloc(sizeof(EX_MEM));
-	MEM_WB* mem_wb = (int *)malloc(sizeof(MEM_WB));
+	IF_ID* if_id[2]; //= (int *)malloc(sizeof(IF_ID));
+	ID_EX* id_ex[2]; //= (int *)malloc(sizeof(ID_EX));
+	EX_MEM* ex_mem[2]; //= (int *)malloc(sizeof(EX_MEM));
+	MEM_WB* mem_wb; //= (int *)malloc(sizeof(MEM_WB));
 
 	spData = fopen("temp.bin", "r");
 
@@ -110,12 +110,15 @@ int main(){
 		i++;
 	} //Instruction을 가져와서 Instruction Memory에 저장하기
 
-	if_id->PC = (&Instruction_Memory[0]);
+	if_id[1]->PC = (&Instruction_Memory[0]);
 
-	Instruction_Fetch(spData, if_id);
-	Instruction_Decode(if_id, id_ex);
-	Instruction_Execution(id_ex, ex_mem);
-	Memory(ex_mem, mem_wb);
+	Instruction_Fetch(if_id[1], id_ex[2]);
+	if_id[2] = if_id[1];
+	Instruction_Decode(if_id[2], id_ex[1]);
+	id_ex[2] = id_ex[1];
+	Instruction_Execution(id_ex[2], ex_mem[1]);
+	ex_mem[2] = ex_mem[1];
+	Memory(ex_mem[2], mem_wb);
 	
 	Memory_print();
 	fclose(spData);
@@ -143,7 +146,7 @@ void Memory_print(){
 	int i;
 	for (i = 0; i < 1000000; i++){
 		if (Mem[i] != 0){
-			printf("                          Mem[%d] : %d \n", i, Mem[i]);
+			printf("Mem[%d] : %d \n", i, Mem[i]);
 		}
 	}
 }
@@ -263,6 +266,7 @@ void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem){
 			break;
 		case 0x08:
 //			Jump_Register(); /////////////////////////////////////////////////////Jump_Register 수정
+			jump = 1;
 			break;
 		case 0x27:
 			ex_mem->ALU_result = ~(id_ex->rs_data | id_ex->rt_data); //Nor
@@ -346,8 +350,7 @@ void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem){
 		}
 		break;
 	case Jump:
-//		ex_mem->PC = id_ex->j_address;
-		jump = 1; ///////////////////////////////////////////////////////////////////////// 수정하기
+		jump = 1;
 		break;
 	case Jump_And_Link:
 //		ex_mem->PC = id_ex->j_address;

@@ -15,7 +15,7 @@ typedef struct ID_EX{
 	int immediate;
 	int SignExt;
 	int rt_rd_address;
-	int b_address;
+	int rs_address; //data dependency 확인하기 위해
 	int j_address;
 	int sh;
 	int func;
@@ -23,6 +23,7 @@ typedef struct ID_EX{
 
 typedef struct EX_MEM{
 	int* PC;
+	int b_address;
 	int j_address;
 	int ALU_result;
 	int rt_data;
@@ -34,6 +35,10 @@ typedef struct MEM_WB{
 	int data;
 	int address;
 }MEM_WB;
+
+/*typedef struct WB_IF{
+	int* PC;
+}WB_IF;*/
 
 
 

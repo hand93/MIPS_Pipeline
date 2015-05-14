@@ -19,16 +19,16 @@ int memRead = 0;
 int memtoReg = 0;
 int ALUop = 0;
 int memWrite = 0;
-//int ALUSrc = 0; 
+int ALUSrc = 0; 
 int regWrite = 0;
 int bcond = 0;
 
 void swapbit(int* ptr); //윈도우에서 거꾸로 읽는 것을 원래대로 만들어줌.
 void Memory_print();
 
-void Instruction_Fetch(IF_ID* if_id, ID_EX* id_ex);
+void Instruction_Fetch(IF_ID* if_id, EX_MEM* ex_mem);
 void Instruction_Decode(IF_ID* if_id, ID_EX* id_ex);
-void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem);
+void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem_o, MEM_WB* mem_wb, EX_MEM* ex_mem_i);
 void Memory(EX_MEM* ex_mem, MEM_WB* mem_wb);
 void Write_Back(MEM_WB* mem_wb);
 
@@ -94,11 +94,11 @@ int main(){
 	IF_ID* if_id[2]; //= (int *)malloc(sizeof(IF_ID));
 	ID_EX* id_ex[2]; //= (int *)malloc(sizeof(ID_EX));
 	EX_MEM* ex_mem[2]; //= (int *)malloc(sizeof(EX_MEM));
-	MEM_WB* mem_wb; //= (int *)malloc(sizeof(MEM_WB));
+	MEM_WB* mem_wb[2]; //= (int *)malloc(sizeof(MEM_WB));
 
 	spData = fopen("temp.bin", "r");
 
-	if(spData==NULL){
+	if (spData == NULL){
 		printf("Could not open the file.\n");
 	}
 
@@ -112,13 +112,21 @@ int main(){
 
 	if_id[1]->PC = (&Instruction_Memory[0]);
 
-	Instruction_Fetch(if_id[0], id_ex[1]);
-	if_id[1] = if_id[0];
-	Instruction_Decode(if_id[1], id_ex[0]);
-	id_ex[1] = id_ex[0];
-	Instruction_Execution(id_ex[1], ex_mem[0]);
-	ex_mem[1] = ex_mem[0];
-	Memory(ex_mem[1], mem_wb);
+	while (if_id[0]->PC != 0){
+		Instruction_Fetch(if_id[0], mem_wb[1]);
+		if_id[1] = if_id[0];
+
+		Instruction_Decode(if_id[1], id_ex[0]);
+		id_ex[1] = id_ex[0];
+
+		Instruction_Execution(id_ex[1], ex_mem[0], mem_wb[1], ex_mem[1]);
+		ex_mem[1] = ex_mem[0];
+
+		Memory(ex_mem[1], mem_wb[0]);
+		mem_wb[1] = mem_wb[0];
+
+		Write_Back(mem_wb[1]);
+	}
 	
 	Memory_print();
 	fclose(spData);
@@ -153,27 +161,26 @@ void Memory_print(){
 
 
 
-void Instruction_Fetch(IF_ID* if_id, ID_EX* id_ex){
+void Instruction_Fetch(IF_ID* if_id, EX_MEM* ex_mem){
 
 	if_id->instruction = *(if_id->PC);
-	pcSrc1 = jump;
-	pcSrc2 = jump & bcond;
 
 	if (if_id->PC != (&Instruction_Memory[0])){
 		if (pcSrc2 = 1){
-			if_id->PC = id_ex->b_address;
+			if_id->PC = ex_mem->b_address;
 			pcSrc2 = 0;
 			if (pcSrc1 = 1){
-				if_id->PC = id_ex->j_address;
+				if_id->PC = ex_mem->j_address;
 				jump = 0;
 				pcSrc1 = 0;
 			}
 		}
 		else if_id->PC += 4;
 	}
-	else if (id_ex->PC == 0){
+	else if (if_id->PC == 0){
 		printf("The end");
 	}//WB stage에서 PC가 0이 되면 종료	
+
 }
 
 void Instruction_Decode(IF_ID* if_id, ID_EX* id_ex){
@@ -233,71 +240,103 @@ void Instruction_Decode(IF_ID* if_id, ID_EX* id_ex){
 		id_ex->rt_rd_address = rd;
 	}
 	else id_ex->rt_rd_address = rt;
+	id_ex->rs_address = rs;
+	//id_ex->rt_address = rt;
+	//id_ex->rd_address = rd;
 	id_ex->j_address = Instruction_Memory + (JumpAddr(address, if_id->PC) / 4);
-	id_ex->b_address = BranchAddr(immediate);
 	id_ex->sh = shamt;
 	id_ex->func = funct;
+
 }
 
-void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem){
 
-	ex_mem->PC = id_ex->PC;
-	ex_mem->rt_data = id_ex->rt_data;
-	ex_mem->address = id_ex->rt_rd_address;
 
-	int ALU_input;
+
+
+void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem_o, MEM_WB* mem_wb, EX_MEM* ex_mem_i){
+
+	ex_mem_i->PC = id_ex->PC;
+	ex_mem_i->rt_data = id_ex->rt_data;
+	//ex_mem_i->rt_address = id_ex->rt_address;
+	//ex_mem_i->rt_address = id_ex->rd_address;
+	/*if (regDst == 1){
+		ex_mem_i->address = id_ex->rd_address;
+	}
+	else ex_mem_i->address = id_ex->rt_address;*/
+	ex_mem_i->address = id_ex->rt_rd_address;
+	ex_mem_i->b_address = BranchAddr(id_ex->immediate);
+
+	////////////////Data Dependency _forwarding
+
+	if (mem_wb->address == id_ex->rt_rd_address){
+		id_ex->rt_data = mem_wb->data;
+	}
+	else if (mem_wb->address == id_ex->rs_address){
+		id_ex->rs_data = mem_wb->data;
+	}
+
+	if (ex_mem_o->address == id_ex->rt_rd_address){
+		id_ex->rt_data = ex_mem_o->ALU_result;
+	}
+	else if (ex_mem_o->address == id_ex->rs_address){
+		id_ex->rs_data = ex_mem_o->ALU_result;
+	}
+
+
+	//excute
 
 	switch (id_ex->opcode){
 	case 0x00:
 		switch (id_ex->sh){
 		case 0x20:
-			ex_mem->ALU_result = id_ex->rs_data + id_ex->rt_data;  //Add
+			ex_mem_i->ALU_result = id_ex->rs_data + id_ex->rt_data;  //Add
 			break;
 		case 0x21: 
 			if (id_ex->rt_data == 0){
-				ex_mem->ALU_result = id_ex->rs_data; //Move
+				ex_mem_i->ALU_result = id_ex->rs_data; //Move
 			}
 			else {
-				ex_mem->ALU_result = id_ex->rs_data + id_ex->rt_data; //Add Unsigned
+				ex_mem_i->ALU_result = id_ex->rs_data + id_ex->rt_data; //Add Unsigned
 			}
 			break;
 		case 0x24:
-			ex_mem->ALU_result = id_ex->rs_data & id_ex->rt_data;  //And
+			ex_mem_i->ALU_result = id_ex->rs_data & id_ex->rt_data;  //And
 			break;
 		case 0x08:
 //			Jump_Register(); /////////////////////////////////////////////////////Jump_Register 수정
 			jump = 1;
 			break;
 		case 0x27:
-			ex_mem->ALU_result = ~(id_ex->rs_data | id_ex->rt_data); //Nor
+			ex_mem_i->ALU_result = ~(id_ex->rs_data | id_ex->rt_data); //Nor
 
 			break;
 		case 0x25:
-			ex_mem->ALU_result = id_ex->rs_data | id_ex->rt_data; //Or
+			ex_mem_i->ALU_result = id_ex->rs_data | id_ex->rt_data; //Or
 			break;
 		case 0x2a:
-			ex_mem->rt_data = (id_ex->rs_data < id_ex->rt_data) ? 1 : 0; // Set_Less_Than
+			ex_mem_i->rt_data = (id_ex->rs_data < id_ex->rt_data) ? 1 : 0; // Set_Less_Than
 			break;
 		case 0x2b:
-			ex_mem->rt_data = (id_ex->rs_data < id_ex->SignExt) ? 1 : 0; // Set_Less_Than_Imm_Unsigned
+			ex_mem_i->rt_data = (id_ex->rs_data < id_ex->SignExt) ? 1 : 0; // Set_Less_Than_Imm_Unsigned
+			ALUSrc = 1;
 			break;
 		case 0x00:
-			ex_mem->ALU_result = id_ex->rt_data << id_ex->sh; //Shift_Left_Logical
+			ex_mem_i->ALU_result = id_ex->rt_data << id_ex->sh; //Shift_Left_Logical
 			break;
 		case 0x02:
-			ex_mem->ALU_result = id_ex->rt_data >> id_ex->sh; //Shift_Right_Logical
+			ex_mem_i->ALU_result = id_ex->rt_data >> id_ex->sh; //Shift_Right_Logical
 			break;
 		case 0x22:
-			ex_mem->ALU_result = id_ex->rs_data - id_ex->rt_data; //Subtract
+			ex_mem_i->ALU_result = id_ex->rs_data - id_ex->rt_data; //Subtract
 			break;
 		case 0x23:
-			ex_mem->ALU_result = id_ex->rs_data - id_ex->rt_data; //Subtract_Unsigned
+			ex_mem_i->ALU_result = id_ex->rs_data - id_ex->rt_data; //Subtract_Unsigned
 			break;
 		case 0x10:
-			ex_mem->ALU_result = Hi; //Move_From_Hi
+			ex_mem_i->ALU_result = Hi; //Move_From_Hi
 			break;
 		case 0x12:
-			ex_mem->ALU_result = Lo; //Move_From_Low
+			ex_mem_i->ALU_result = Lo; //Move_From_Low
 			break;
 		case 0x18:
 			Hi = ((id_ex->rs_data * id_ex->rt_data) & 0xFFFFFFFF00000000) >> 32; //Multiply
@@ -308,29 +347,33 @@ void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem){
 			Lo = ((id_ex->rs_data * id_ex->rt_data) & 0x00000000FFFFFFFF);
 			break;
 //		case 0x03:
-//			ex_mem->ALU_result = id_ex->rt_data >>> id_ex->sh; //Shift_Right_Arith
-//			ex_mem->address = id_ex->rd_address;
+//			ex_mem_i->ALU_result = id_ex->rt_data >>> id_ex->sh; //Shift_Right_Arith
+//			ex_mem_i->address = id_ex->rd_address;
 		}
 		break;
 	case Add_Immediate:
-		ex_mem->rt_data = id_ex->rs_data & id_ex->SignExt;
+		ex_mem_i->rt_data = id_ex->rs_data & id_ex->SignExt;
 		break;
 	case 0x09:
 		if (id_ex->rs_data != 0){
-			ex_mem->rt_data = id_ex->rs_data & id_ex->SignExt; //Add_imm_Unsigned
+			ex_mem_i->rt_data = id_ex->rs_data & id_ex->SignExt; //Add_imm_Unsigned
+			ALUSrc = 1;
+
 		}
 		else{
-			ex_mem->rt_data = id_ex->immediate; //Load_Immediate
+			ex_mem_i->rt_data = id_ex->immediate; //Load_Immediate
+			ALUSrc = 1;
 		}
 		break;
 	case And_Immediate:
-		ex_mem->rt_data = id_ex->rs_data & id_ex->immediate;
+		ex_mem_i->rt_data = id_ex->rs_data & id_ex->immediate;
+		ALUSrc = 1;
 
 		break;
 	case Branch_On_Equal:
 		branch = 1;
 		if (id_ex->rs_data == id_ex->rt_data){
-			ex_mem->PC = ex_mem->PC + 1 + (id_ex->SignExt / 4);
+//			ex_mem_i->PC = ex_mem_i->PC + 1 + (id_ex->SignExt / 4);		Fetch 단계에서..
 			bcond = 1;
 		}
 		break;
@@ -338,13 +381,13 @@ void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem){
 		branch = 1;
 		if (id_ex->rt_data != 0){
 			if (id_ex->rs_data != id_ex->rt_data){ //Branch_On_Not_Equal
-				ex_mem->PC = ex_mem->PC + 1 + (id_ex->SignExt / 4);
+//				ex_mem_i->PC = ex_mem_i->PC + 1 + (id_ex->SignExt / 4);		Fetch 단계에서..
 				bcond = 1;
 			}
 		}
 		else{
 			if (id_ex->rs_data != 0){ //Branch_On_Not_Equl_Zero
-				ex_mem->PC = ex_mem->PC + 1 + (id_ex->SignExt / 4);
+//				ex_mem_i->PC = ex_mem_i->PC + 1 + (id_ex->SignExt / 4);		Fetch 단계에서..
 				bcond = 1;
 			}
 		}
@@ -353,46 +396,56 @@ void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem){
 		jump = 1;
 		break;
 	case Jump_And_Link:
-//		ex_mem->PC = id_ex->j_address;
-		id_ex->r31_data = ex_mem->PC + 2; 
+		id_ex->r31_data = ex_mem_i->PC + 2; /////////////////////////////////////////////////수정
 		jump = 1;
 		break;
 	case Load_Halfword_Unsigned:
-		ex_mem->ALU_result = id_ex->rs_data + id_ex->SignExt;
+		ex_mem_i->ALU_result = id_ex->rs_data + id_ex->SignExt;
+		ALUSrc = 1;
 //		reg[rt] = Mem[(reg[rs] + SignExtImm(imm))];    Memory 단계에서..
 		break;
 	case Load_Linked:
-		ex_mem->ALU_result = id_ex->rs_data + id_ex->SignExt;
+		ex_mem_i->ALU_result = id_ex->rs_data + id_ex->SignExt;
+		ALUSrc = 1;
 //		reg[rt] = Mem[(reg[rs] + SignExtImm(imm))];    Memory 단계에서..
 		break;
 	case Load_Upper_Imm:
-		ex_mem->ALU_result = id_ex->SignExt >> 16;
+		ex_mem_i->ALU_result = id_ex->SignExt >> 16;
+		ALUSrc = 1;
 		break;
 	case Load_Word:
-		ex_mem->ALU_result = id_ex->rs_data + id_ex->SignExt;
+		ex_mem_i->ALU_result = id_ex->rs_data + id_ex->SignExt;
+		ALUSrc = 1;
 //		reg[rt] = Mem[(reg[rs] + SignExtImm(imm))];	Memory 단계에서..
 		break;
 	case Or_Immediate:
-		ex_mem->ALU_result = id_ex->rs_data | id_ex->immediate;
+		ex_mem_i->ALU_result = id_ex->rs_data | id_ex->immediate;
+		ALUSrc = 1;
 		break;
 	case Set_Less_Than_Imm:
-		ex_mem->ALU_result = (id_ex->rs_data < id_ex->SignExt) ? 1 : 0;
+		ex_mem_i->ALU_result = (id_ex->rs_data < id_ex->SignExt) ? 1 : 0;
+		ALUSrc = 1;
 		break;
 	case Set_Less_Than_Imm_Unsigned:
-		ex_mem->ALU_result = (id_ex->rs_data < id_ex->SignExt) ? 1 : 0;
+		ex_mem_i->ALU_result = (id_ex->rs_data < id_ex->SignExt) ? 1 : 0;
+		ALUSrc = 1;
 		break;
 	case Store_Conditional:
 		//Mem[(reg[rs] + SignExtImm(imm)) / 4] = reg[rt];
 		//reg[rt] = (atomic) ? 1 : 0;
+		//ALUSrc = 1;
 		break;
 	case Store_Halfword:
 		//Mem[(reg[rs] + SignExtImm(imm)) / 4] = reg[rt];
+		//ALUSrc = 1;
 		break;
 	case Store_Word:
-		ex_mem->ALU_result = id_ex->rs_data + id_ex->SignExt;
+		ex_mem_i->ALU_result = id_ex->rs_data + id_ex->SignExt;
+		ALUSrc = 1;
 //		Mem[(reg[rs] + SignExtImm(imm))/4] = reg[rt]; Memory 단계에서..
 		break;
 	}
+
 }
 
 void Memory(EX_MEM* ex_mem, MEM_WB* mem_wb){
@@ -413,6 +466,9 @@ void Memory(EX_MEM* ex_mem, MEM_WB* mem_wb){
 }
 
 void Write_Back(MEM_WB* mem_wb){
+	pcSrc1 = jump;
+	pcSrc2 = jump & bcond;
+
 	reg[mem_wb->address] = mem_wb->data;
 }
 

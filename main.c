@@ -17,11 +17,14 @@ int jump = 0;
 int branch = 0;
 int memRead = 0;
 int memtoReg = 0;
-int ALUop = 0;
+//int ALUop = 0;
 int memWrite = 0;
 int ALUSrc = 0; 
 int regWrite = 0;
 int bcond = 0;
+//추가 control bit
+int jal = 0; //jump and link
+int jr = 0; //jump register
 
 void swapbit(int* ptr); //윈도우에서 거꾸로 읽는 것을 원래대로 만들어줌.
 void Memory_print();
@@ -91,10 +94,28 @@ int main(){
 	reg[ra] = 0xFFFFFFFF;
 	int i = 0;
 
-	IF_ID* if_id[2]; //= (int *)malloc(sizeof(IF_ID));
-	ID_EX* id_ex[2]; //= (int *)malloc(sizeof(ID_EX));
-	EX_MEM* ex_mem[2]; //= (int *)malloc(sizeof(EX_MEM));
-	MEM_WB* mem_wb[2]; //= (int *)malloc(sizeof(MEM_WB));
+	IF_ID* if_id[2];
+	ID_EX* id_ex[2];
+	EX_MEM* ex_mem[2];
+	MEM_WB* mem_wb[2]; 
+
+	if_id[0] = (int *)malloc(sizeof(IF_ID));
+	if_id[1] = (int *)malloc(sizeof(IF_ID));
+	id_ex[0] = (int *)malloc(sizeof(ID_EX));
+	id_ex[1] = (int *)malloc(sizeof(ID_EX));
+	ex_mem[0] = (int *)malloc(sizeof(EX_MEM));
+	ex_mem[1] = (int *)malloc(sizeof(EX_MEM));
+	mem_wb[0] = (int *)malloc(sizeof(MEM_WB));
+	mem_wb[1] = (int *)malloc(sizeof(MEM_WB)); //구조체 메모리 할당
+
+	memset(if_id[0], 0, sizeof(struct IF_ID));
+	memset(if_id[1], 0, sizeof(struct IF_ID));
+	memset(id_ex[0], 0, sizeof(struct ID_EX));
+	memset(id_ex[1], 0, sizeof(struct ID_EX));
+	memset(ex_mem[0], 0, sizeof(struct EX_MEM));
+	memset(ex_mem[1], 0, sizeof(struct EX_MEM));
+	memset(mem_wb[0], 0, sizeof(struct MEM_WB));
+	memset(mem_wb[1], 0, sizeof(struct MEM_WB)); //구조체 초기화
 
 	spData = fopen("temp.bin", "r");
 
@@ -110,10 +131,10 @@ int main(){
 		i++;
 	} //Instruction을 가져와서 Instruction Memory에 저장하기
 
-	if_id[1]->PC = (&Instruction_Memory[0]);
+	if_id[0]->PC = Instruction_Memory;
 
 	while (if_id[0]->PC != 0){
-		Instruction_Fetch(if_id[0], mem_wb[1]);
+		Instruction_Fetch(if_id[0], mem_wb[1], ex_mem[]);
 		if_id[1] = if_id[0];
 
 		Instruction_Decode(if_id[1], id_ex[0]);
@@ -168,6 +189,7 @@ void Instruction_Fetch(IF_ID* if_id, EX_MEM* ex_mem){
 	if (if_id->PC != (&Instruction_Memory[0])){
 		if (pcSrc2 = 1){
 			if_id->PC = ex_mem->b_address;
+			branch = 0;
 			pcSrc2 = 0;
 			if (pcSrc1 = 1){
 				if_id->PC = ex_mem->j_address;
@@ -175,7 +197,15 @@ void Instruction_Fetch(IF_ID* if_id, EX_MEM* ex_mem){
 				pcSrc1 = 0;
 			}
 		}
-		else if_id->PC += 4;
+		else if (jal == 1){
+			if_id->PC += 2;
+			jal = 0;
+		}
+		else if (jr == 1){
+			if_id->PC = ;
+			jr = 0;
+		}
+		else if_id->PC++;
 	}
 	else if (if_id->PC == 0){
 		printf("The end");
@@ -253,10 +283,11 @@ void Instruction_Decode(IF_ID* if_id, ID_EX* id_ex){
 
 
 
-void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem_o, MEM_WB* mem_wb, EX_MEM* ex_mem_i){
+void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem_i, MEM_WB* mem_wb, EX_MEM* ex_mem_o){
 
 	ex_mem_i->PC = id_ex->PC;
 	ex_mem_i->rt_data = id_ex->rt_data;
+	ex_mem_i->rs_data = id_ex->rs_data;
 	//ex_mem_i->rt_address = id_ex->rt_address;
 	//ex_mem_i->rt_address = id_ex->rd_address;
 	/*if (regDst == 1){
@@ -282,9 +313,6 @@ void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem_o, MEM_WB* mem_wb, EX_ME
 		id_ex->rs_data = ex_mem_o->ALU_result;
 	}
 
-
-	//excute
-
 	switch (id_ex->opcode){
 	case 0x00:
 		switch (id_ex->sh){
@@ -303,12 +331,11 @@ void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem_o, MEM_WB* mem_wb, EX_ME
 			ex_mem_i->ALU_result = id_ex->rs_data & id_ex->rt_data;  //And
 			break;
 		case 0x08:
-//			Jump_Register(); /////////////////////////////////////////////////////Jump_Register 수정
-			jump = 1;
+//			PC = reg[rs]; /////////////////////////////////////////////////////////////////////Jump_Register 수정
+			jr = 1; //Jump_Regster
 			break;
 		case 0x27:
 			ex_mem_i->ALU_result = ~(id_ex->rs_data | id_ex->rt_data); //Nor
-
 			break;
 		case 0x25:
 			ex_mem_i->ALU_result = id_ex->rs_data | id_ex->rt_data; //Or
@@ -396,8 +423,8 @@ void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem_o, MEM_WB* mem_wb, EX_ME
 		jump = 1;
 		break;
 	case Jump_And_Link:
-		id_ex->r31_data = ex_mem_i->PC + 2; /////////////////////////////////////////////////수정
-		jump = 1;
+		//ex_mem_i->PC + 2 =id_ex->r31_data; Fetch 단계에서..
+		jal = 1;
 		break;
 	case Load_Halfword_Unsigned:
 		ex_mem_i->ALU_result = id_ex->rs_data + id_ex->SignExt;

@@ -26,6 +26,7 @@ typedef struct EX_MEM{
 	int b_address;
 	int j_address;
 	int ALU_result;
+	int rs_data; //jr 
 	int rt_data;
 	int address;
 }EX_MEM;

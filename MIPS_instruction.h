@@ -3,22 +3,35 @@
 typedef struct IF_ID{
 	int* PC;
 	int instruction;
-	//valid
 }IF_ID;
 
 typedef struct ID_EX{
 	int* PC;
-	int opcode;
+//	int opcode;
 	int rs_data;
 	int rt_data;
 	int r31_data; //Jump And Link를 위해
 	int immediate;
 	int SignExt;
-	int rt_rd_address;
+//	int rt_rd_address;
+	int rt_address;
+	int rd_address;
 	int rs_address; //data dependency 확인하기 위해
 	int j_address;
 	int sh;
 	int func;
+	//CONTROL
+//	int ALUSrc;
+	int ALUop; //opcode 대신
+	int RegDst;
+	int branch;
+	int RegWrite;
+	int MemWrite;
+	int MemRead;
+	int MemtoReg;
+	int jump;
+	int jr;
+	int jal;
 }ID_EX;
 
 typedef struct EX_MEM{
@@ -29,17 +42,30 @@ typedef struct EX_MEM{
 	int rs_data; //jr 
 	int rt_data;
 	int address;
+	//CONTROL
+	int branch;
+	int bcond;
+	int PCSrc;
+	int MemWrite;
+	int MemRead;
+	int MemtoReg;
+	int RegWrite;
 }EX_MEM;
 
 typedef struct MEM_WB{
 	int* PC;
-	int data;
+	int Mem_data;
+	int ALU_result;
 	int address;
+	//CONTROL
+	int MemtoReg;
+	int RegWrite;
 }MEM_WB;
 
-/*typedef struct WB_IF{
-	int* PC;
-}WB_IF;*/
+typedef struct BTB{
+	int PC;
+	int Branch_target_address;
+}BTB;
 
 
 

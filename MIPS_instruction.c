@@ -33,12 +33,12 @@ int SignExtImm(int imm){
 
 
 int BranchAddr(int imm){
-	return SignExtImm(imm) <<2;
+	return (SignExtImm(imm) <<2)/4;
 }
 
 int JumpAddr(int address, int* PC){
 	int i = (PC-&Instruction_Memory[0]) + 4;
-	return (i & (0xF0000000)) | (address<<2);
+	return ((i & (0xF0000000)) | (address<<2))/4;
 }
 
 /*

@@ -65,7 +65,6 @@ typedef struct MEM_WB{
 typedef struct BTB{
 	int PC;
 	int Branch_target_address;
-	int twobit_counter;
 }BTB;
 
 

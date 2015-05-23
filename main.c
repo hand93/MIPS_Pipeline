@@ -11,20 +11,6 @@ enum regNum { zero, at, v0, v1, a0, a1, a2, a3, t0, t1, t2, t3, t4, t5, t6, t7, 
 BTB BTB_table[1024];
 //s8 == fp
 
-
-void swapbit(int* ptr); //윈도우에서 거꾸로 읽는 것을 원래대로 만들어줌.
-void Memory_print();
-int find_PC_in_BTB(int* PC);
-
-
-void Instruction_Fetch(IF_ID* if_id, ID_EX* id_ex, EX_MEM* ex_mem);
-void Instruction_Decode(IF_ID* if_id, ID_EX* id_ex);
-void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem_o, MEM_WB* mem_wb, EX_MEM* ex_mem_i);
-void Memory(EX_MEM* ex_mem, MEM_WB* mem_wb);
-void Write_Back(MEM_WB* mem_wb);
-
-
-
 #define Add 0x0
 #define Add_Immediate 0x8
 #define Add_Imm_Unsigned 0x9
@@ -72,6 +58,16 @@ void Write_Back(MEM_WB* mem_wb);
 #define Store_FP 0x3d
 #define Double2 0x3d
 
+void swapbit(int* ptr); //윈도우에서 거꾸로 읽는 것을 원래대로 만들어줌.
+void Memory_print();
+int find_PC_in_BTB(int* PC);
+
+
+void Instruction_Fetch(IF_ID* if_id, ID_EX* id_ex, EX_MEM* ex_mem);
+void Instruction_Decode(IF_ID* if_id, ID_EX* id_ex);
+void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem_o, MEM_WB* mem_wb, EX_MEM* ex_mem_i);
+void Memory(EX_MEM* ex_mem, MEM_WB* mem_wb);
+void Write_Back(MEM_WB* mem_wb);
 
 int main(){
 	FILE* spData;
@@ -102,7 +98,7 @@ int main(){
 	memset(mem_wb[0], 0, sizeof(struct MEM_WB));
 	memset(mem_wb[1], 0, sizeof(struct MEM_WB)); //구조체 초기화
 
-	spData = fopen("simple.bin", "r");
+	spData = fopen("temp.bin", "r");
 
 	if (spData == NULL){
 		printf("Could not open the file.\n");
@@ -130,13 +126,14 @@ int main(){
 		Instruction_Decode(if_id[1], id_ex[0]);
 		id_ex[1] = id_ex[0];
 
-		Instruction_Fetch(if_id[0], id_ex[1], ex_mem[1], if_id[1]);
+		Instruction_Fetch(if_id[0], id_ex[1], ex_mem[0], if_id[1]);
 		if_id[1] = if_id[0];		
 	}
 	Write_Back(mem_wb[1]);
-
+	printf("The end\n");
 
 	Memory_print();
+	
 	fclose(spData);
 
 	return 0;
@@ -168,14 +165,17 @@ void Memory_print(){
 }
 
 int find_PC_in_BTB(int PC){
-	int i;
+	int i=0;
 
 	for (i = 0; i < 1024; i++){
 		if (BTB_table[i].PC == PC){
-			return BTB_table[i].Branch_target_address;
+			if (BTB_table[i].twobit_counter == (3 | 2)){
+				return BTB_table[i].Branch_target_address;
+			}//BTB에 일치하는 PC값이 있고, counter가 strongly taken이거나 weakly taken이면 branch.
+			else return NULL; //BTB에 일치하는 PC값이 있지만 strongly !taken이거나 weakly !taken이면 branch 안함
 		}
 	}
-	return NULL;
+	return NULL; //BTB에 일치하는 PC값이 없음.
 }
 
 
@@ -189,7 +189,7 @@ void Instruction_Fetch(IF_ID* if_id_i, ID_EX* id_ex, EX_MEM* ex_mem, IF_ID* if_i
 		printf("The end");
 	}
 	else if(id_ex->jump == 1){
-		if_id_i->PC = &Instruction_Memory[0] + id_ex->j_address;
+		if_id_i->PC = Instruction_Memory + id_ex->j_address;
 	}
 	else if (id_ex->jal == 1){
 		if_id_i->PC += 2;
@@ -197,13 +197,40 @@ void Instruction_Fetch(IF_ID* if_id_i, ID_EX* id_ex, EX_MEM* ex_mem, IF_ID* if_i
 	else if (id_ex->jr == 1){
 		if_id_i->PC = id_ex->rs_data;
 	}
-	else if (branch_target_address){
-		if_id_i->PC = &Instruction_Memory[0] + branch_target_address;
+	else if (id_ex->branch == 1){
+		int target_address = find_PC_in_BTB(if_id_i->PC);
+
+		if (target_address == NULL){
+			
+			(if_id_i->PC)++;
+		}
+		else if_id_i->PC = Instruction_Memory + 1 + target_address;
 	}
-	else if ((ex_mem->branch == 1) & (ex_mem->bcond == 0)){ //branch인데 condition을 만족하지 않을 때
-		if_id_i->PC = (ex_mem->PC)++;
-		memset(ex_mem, 0, sizeof(struct EX_MEM));
-		memset(if_id_o, 0, sizeof(struct IF_ID)); //flush
+	else if (ex_mem->branch == 1){ 
+		int i;
+
+		if (ex_mem->bcond == 0){
+			if_id_i->PC = (ex_mem->PC)++;
+			memset(if_id_o, 0, sizeof(struct IF_ID)); //flush
+
+			for (i = 0; i < 1024; i++){
+				if (BTB_table[i].PC == id_ex->PC){
+					if (BTB_table[i].twobit_counter != 0){
+						BTB_table[i].twobit_counter--;
+					}
+				}
+			}
+		}//branch인데 condition을 만족하지 않을 때(!taken)
+		else {
+			for (i = 0; i < 1024; i++){
+				if (BTB_table[i].PC == id_ex->PC){
+					if (BTB_table[i].twobit_counter != 3){
+						BTB_table[i].twobit_counter++;
+					}
+				}
+			}
+			(if_id_i->PC)++;
+		}//branch인데 condition을 만족할 때(taken)		//prediction을 bracnh 해야하는데 '안함'으로 predict 했을때..... 수정하기
 	}
 	else (if_id_i->PC)++;
 
@@ -227,7 +254,7 @@ void Instruction_Decode(IF_ID* if_id, ID_EX* id_ex){
 	address = ((inst)&0x03FFFFFF);
 
 
-	//Control
+	/////////////Control
 	if(opcode == 0){
 		id_ex->RegWrite = 1;
 		id_ex->branch = 0;
@@ -333,7 +360,7 @@ void Instruction_Decode(IF_ID* if_id, ID_EX* id_ex){
 	id_ex->rt_address = rt;
 	id_ex->rd_address = rd;
 	id_ex->rs_address = rs;
-	id_ex->j_address = Instruction_Memory + (JumpAddr(address, if_id->PC) / 4);
+	id_ex->j_address = JumpAddr(address, if_id->PC);
 	id_ex->sh = shamt;
 	id_ex->func = funct;
 }
@@ -393,6 +420,7 @@ void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem_i, MEM_WB* mem_wb, EX_ME
 			}
 			else {
 				ex_mem_i->ALU_result = id_ex->rs_data + id_ex->rt_data; //Add Unsigned
+				printf("addu\n");
 			}
 			break;
 		case 0x24:
@@ -473,18 +501,24 @@ void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem_i, MEM_WB* mem_wb, EX_ME
 		}
 		break;
 	case 0x5:
-		if (id_ex->rt_data != 0){
+		if (id_ex->rt_address != 0){
 			if (id_ex->rs_data != id_ex->rt_data){ //Branch_On_Not_Equal
+				if (id_ex->rs_data != id_ex->rt_data){
+					ex_mem_i->bcond = 1;
+				}
 //				ex_mem_i->PC = ex_mem_i->PC + 1 + (id_ex->SignExt / 4);		Fetch 단계에서..
-				ex_mem_i->bcond = 1;
 			}
 		}
-		else if (id_ex->rs_data != 0){ //Branch_On_Not_Equal_Zero
+		else if (id_ex->rs_address != 0){ //Branch_On_Not_Equal_Zero
 //			ex_mem_i->PC = ex_mem_i->PC + 1 + (id_ex->SignExt / 4);		Fetch 단계에서..
-			ex_mem_i->bcond = 1;
+			if (id_ex->rs_data != 0){
+				ex_mem_i->bcond = 1;
+			}
+			printf("bnez\n");
 		}
 		break;
 	case Jump:
+		printf("j\n");
 		break;
 	case Jump_And_Link:
 		//ex_mem_i->PC + 2 =id_ex->r31_data; Fetch 단계에서..
@@ -515,6 +549,7 @@ void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem_i, MEM_WB* mem_wb, EX_ME
 		break;
 	case Set_Less_Than_Imm:
 		ex_mem_i->ALU_result = (id_ex->rs_data < id_ex->SignExt) ? 1 : 0;
+		printf("slti\n");
 //		ALUSrc = 1;
 		break;
 	case Set_Less_Than_Imm_Unsigned:

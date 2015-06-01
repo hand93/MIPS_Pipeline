@@ -1,15 +1,13 @@
 #include <stdio.h>
 #include "MIPS_instruction.h"
 
-extern int Instruction_Memory[(0x100000 / 4)] = { 0 };
-//extern int* PC = (&Instruction_Memory[0]);
 int reg[32] = { 0 };
-int Mem[1000000] = { 0 };
+int Mem[(0x100000 / 4)] = { 0 };
 int Hi = 0;
 int Lo = 0;
 enum regNum { zero, at, v0, v1, a0, a1, a2, a3, t0, t1, t2, t3, t4, t5, t6, t7, s0, s1, s2, s3, s4, s5, s6, s7, t8, t9, k0, k1, gp, sp, fp, ra };
 BTB BTB_table[1024];
-//s8 == fp
+//int flush[2] = { 0 };
 
 #define Add 0x0
 #define Add_Immediate 0x8
@@ -58,22 +56,22 @@ BTB BTB_table[1024];
 #define Store_FP 0x3d
 #define Double2 0x3d
 
-void swapbit(int* ptr); //윈도우에서 거꾸로 읽는 것을 원래대로 만들어줌.
-void Memory_print();
+void swapbit(int* ptr);
+void Register_print();
 int find_PC_in_BTB(int* PC);
 
-
-void Instruction_Fetch(IF_ID* if_id, ID_EX* id_ex, EX_MEM* ex_mem);
+void Instruction_Fetch(IF_ID* if_id_i, ID_EX* id_ex, EX_MEM* ex_mem, IF_ID* if_id_o);
 void Instruction_Decode(IF_ID* if_id, ID_EX* id_ex);
-void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem_o, MEM_WB* mem_wb, EX_MEM* ex_mem_i);
+void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem_i, MEM_WB* mem_wb_o, MEM_WB* mem_wb_i, EX_MEM* ex_mem_o);
 void Memory(EX_MEM* ex_mem, MEM_WB* mem_wb);
 void Write_Back(MEM_WB* mem_wb);
 
 int main(){
 	FILE* spData;
-	reg[sp] = 0x8000;
+	reg[sp] = 0x100000;
 	reg[ra] = 0xFFFFFFFF;
 	int i = 0;
+	int count = 0;
 
 	IF_ID* if_id[2];
 	ID_EX* id_ex[2];
@@ -98,41 +96,91 @@ int main(){
 	memset(mem_wb[0], 0, sizeof(struct MEM_WB));
 	memset(mem_wb[1], 0, sizeof(struct MEM_WB)); //구조체 초기화
 
-	spData = fopen("temp.bin", "r");
+	spData = fopen("input2.bin", "r");
 
 	if (spData == NULL){
 		printf("Could not open the file.\n");
 	}
 
 	while (!feof(spData)){
-		fread(Instruction_Memory + i, 4, 1, spData);
-		printf("Instruction[%02d] = %08x ", i, Instruction_Memory[i]);
-		swapbit(Instruction_Memory + i);
-		printf("=> %08x \n", Instruction_Memory[i]);
+		fread(Mem + i, 4, 1, spData);
+		printf("Mem[%02x] = %08x ", i*4, Mem[i]);
+		swapbit(Mem + i);
+		printf("=> %08x \n", Mem[i]);
 		i++;
-	} //Instruction을 가져와서 Instruction Memory에 저장하기
+	} //Instruction을 가져와서 Memory에 저장하기
 
-	if_id[0]->PC = Instruction_Memory;
+	if_id[0]->PC = 0x0;
 
 	while (if_id[0]->PC != -1){
 		Write_Back(mem_wb[1]);
-
 		Memory(ex_mem[1], mem_wb[0]);
-		mem_wb[1] = mem_wb[0];
-
-		Instruction_Execution(id_ex[1], ex_mem[0], mem_wb[1], ex_mem[1]);
-		ex_mem[1] = ex_mem[0];
-
+		Instruction_Execution(id_ex[1], ex_mem[0], mem_wb[1], mem_wb[0], ex_mem[1]);
 		Instruction_Decode(if_id[1], id_ex[0]);
-		id_ex[1] = id_ex[0];
+		Instruction_Fetch(if_id[0], id_ex[0], ex_mem[0], if_id[1]);
 
-		Instruction_Fetch(if_id[0], id_ex[1], ex_mem[0], if_id[1]);
-		if_id[1] = if_id[0];		
+		mem_wb[1]->PC = mem_wb[0]->PC;
+		mem_wb[1]->Mem_data = mem_wb[0]->Mem_data;
+		mem_wb[1]->ALU_result = mem_wb[0]->ALU_result;
+		mem_wb[1]->address = mem_wb[0]->address;
+		mem_wb[1]->MemtoReg = mem_wb[0]->MemtoReg;
+		mem_wb[1]->RegWrite = mem_wb[0]->RegWrite;
+		mem_wb[1]->jal = mem_wb[0]->jal;
+
+		ex_mem[1]->PC = ex_mem[0]->PC;
+		ex_mem[1]->b_address = ex_mem[0]->b_address;
+		ex_mem[1]->j_address = ex_mem[0]->j_address;
+		ex_mem[1]->ALU_result = ex_mem[0]->ALU_result;
+		ex_mem[1]->rs_data = ex_mem[0]->rs_data;
+		ex_mem[1]->rt_data = ex_mem[0]->rt_data;
+		ex_mem[1]->address = ex_mem[0]->address;
+		ex_mem[1]->branch = ex_mem[0]->branch;
+		ex_mem[1]->bcond = ex_mem[0]->bcond;
+		ex_mem[1]->MemWrite = ex_mem[0]->MemWrite;
+		ex_mem[1]->MemRead = ex_mem[0]->MemRead;
+		ex_mem[1]->MemtoReg = ex_mem[0]->MemtoReg;
+		ex_mem[1]->RegWrite = ex_mem[0]->RegWrite;
+		ex_mem[1]->jal = ex_mem[0]->jal;
+
+		id_ex[1]->PC = id_ex[0]->PC;
+		id_ex[1]->rs_data = id_ex[0]->rs_data;
+		id_ex[1]->rt_data = id_ex[0]->rt_data;
+		id_ex[1]->immediate = id_ex[0]->immediate;
+		id_ex[1]->SignExt = id_ex[0]->SignExt;
+		id_ex[1]->rt_address = id_ex[0]->rt_address;
+		id_ex[1]->rd_address = id_ex[0]->rd_address;
+		id_ex[1]->rs_address = id_ex[0]->rs_address;
+		id_ex[1]->j_address = id_ex[0]->j_address;
+		id_ex[1]->sh = id_ex[0]->sh;
+		id_ex[1]->func = id_ex[0]->func;
+		id_ex[1]->ALUop = id_ex[0]->ALUop;
+		id_ex[1]->RegDst = id_ex[0]->RegDst;
+		id_ex[1]->branch = id_ex[0]->branch;
+		id_ex[1]->RegWrite = id_ex[0]->RegWrite;
+		id_ex[1]->MemWrite = id_ex[0]->MemWrite;
+		id_ex[1]->MemRead = id_ex[0]->MemRead;
+		id_ex[1]->MemtoReg = id_ex[0]->MemtoReg;
+		id_ex[1]->jump = id_ex[0]->jump;
+		id_ex[1]->jr = id_ex[0]->jr;
+		id_ex[1]->jal = id_ex[0]->jal;
+
+		if_id[1]->PC = if_id[0]->PC;
+		if_id[1]->instruction = if_id[0]->instruction;
+
+		printf("         r[v0]=%d, cycle : %d\n", reg[2], count);
+		count++;
 	}
 	Write_Back(mem_wb[1]);
+	printf("         r[v0]=%d, cycle : %d\n", reg[2], ++count);
+	Memory(ex_mem[1], mem_wb[0]);
+	mem_wb[1] = mem_wb[0];
+	Write_Back(mem_wb[1]);
+	printf("         r[v0]=%d, cycle : %d\n", reg[2], ++count);
+
+
 	printf("The end\n");
 
-	Memory_print();
+	Register_print();
 	
 	fclose(spData);
 
@@ -155,11 +203,14 @@ void swapbit(int* ptr) {
 	*ptr |= tmp2;
 }
 
-void Memory_print(){
+void Register_print(){
 	int i;
-	for (i = 0; i < 1000000; i++){
-		if (Mem[i] != 0){
-			printf("Mem[%d] : %d \n", i, Mem[i]);
+
+	printf("\n");
+
+	for (i = 0; i < 32; i++){
+		if (reg[i] != 0){
+			printf("reg[%d] : %d \n", i, reg[i]);
 		}
 	}
 }
@@ -181,40 +232,61 @@ int find_PC_in_BTB(int PC){
 
 
 void Instruction_Fetch(IF_ID* if_id_i, ID_EX* id_ex, EX_MEM* ex_mem, IF_ID* if_id_o){
-	int branch_target_address = find_PC_in_BTB(if_id_i->PC);
-	if_id_i->instruction = *(if_id_i->PC);
-	id_ex->PC = if_id_i->PC;
+
+	if_id_i->instruction = Mem[(if_id_i->PC)/4];
 
 	if (if_id_i->PC == -1){
 		printf("The end");
 	}
-	else if(id_ex->jump == 1){
-		if_id_i->PC = Instruction_Memory + id_ex->j_address;
+	else if (id_ex->jump == 1){
+		if_id_i->PC = id_ex->j_address;
 	}
 	else if (id_ex->jal == 1){
-		if_id_i->PC += 2;
+		if_id_i->PC = id_ex->j_address;
 	}
 	else if (id_ex->jr == 1){
 		if_id_i->PC = id_ex->rs_data;
 	}
 	else if (id_ex->branch == 1){
-		int target_address = find_PC_in_BTB(if_id_i->PC);
+		int target_address = find_PC_in_BTB((id_ex->PC)-4);
+		int i = 0;;
+
+		while (BTB_table[i].PC != 0){
+			i++;
+		}
+		BTB_table[i].PC = (id_ex->PC) - 4;
 
 		if (target_address == NULL){
-			
-			(if_id_i->PC)++;
+			if_id_i->PC += 4;
+		}//PC가 BTB_table에 저장이 안되어있거나, 저장이 되어있지만 weakliy !taken, strongly !taken 일때
+		else{
+			if_id_i->PC = if_id_i->PC + 4 + target_address;
 		}
-		else if_id_i->PC = Instruction_Memory + 1 + target_address;
 	}
-	else if (ex_mem->branch == 1){ 
+	else if (ex_mem->branch == 1){
 		int i;
 
 		if (ex_mem->bcond == 0){
-			if_id_i->PC = (ex_mem->PC)++;
-			memset(if_id_o, 0, sizeof(struct IF_ID)); //flush
+			int i = 0;
+
+			while (((ex_mem->PC) - 4) != BTB_table[i].PC){
+				i++;
+			}
+			BTB_table[i].Branch_target_address = ex_mem->b_address;
+
+			if (ex_mem->PC + 4 + BTB_table[i].Branch_target_address == if_id_i->PC){
+				if_id_i->PC = (ex_mem->PC)+4;
+				if_id_i->instruction = Mem[((if_id_i->PC)-4)/4];
+				memset(if_id_o, 0, sizeof(struct IF_ID)); //flush
+				memset(id_ex, 0, sizeof(struct ID_EX));
+				printf("                       flush\n");
+			} //branch 안해야하는데 했을 때
+			else{
+				if_id_i += 4;
+			} //branch 안해야하는데 안했을 때
 
 			for (i = 0; i < 1024; i++){
-				if (BTB_table[i].PC == id_ex->PC){
+				if (BTB_table[i].PC == ((ex_mem->PC))){
 					if (BTB_table[i].twobit_counter != 0){
 						BTB_table[i].twobit_counter--;
 					}
@@ -222,54 +294,70 @@ void Instruction_Fetch(IF_ID* if_id_i, ID_EX* id_ex, EX_MEM* ex_mem, IF_ID* if_i
 			}
 		}//branch인데 condition을 만족하지 않을 때(!taken)
 		else {
-			for (i = 0; i < 1024; i++){
-				if (BTB_table[i].PC == id_ex->PC){
-					if (BTB_table[i].twobit_counter != 3){
-						BTB_table[i].twobit_counter++;
-					}
-				}
-			}
-			(if_id_i->PC)++;
-		}//branch인데 condition을 만족할 때(taken)		//prediction을 bracnh 해야하는데 '안함'으로 predict 했을때..... 수정하기
-	}
-	else (if_id_i->PC)++;
+			int i = 0;
 
+			while (((ex_mem->PC)-4) != BTB_table[i].PC){
+				i++;
+			}
+			BTB_table[i].Branch_target_address = ex_mem->b_address; 
+
+			if (BTB_table[i].Branch_target_address != if_id_i->PC){
+				if_id_i->PC = ex_mem->PC +4+ BTB_table[i].Branch_target_address;
+				if_id_i->instruction = Mem[((if_id_i->PC)-4) / 4];
+
+				memset(if_id_o, 0, sizeof(struct IF_ID)); //flush
+				memset(id_ex, 0, sizeof(struct ID_EX));
+				printf("                       flush\n");
+			}//prediction을 bracnh 해야하는데 '안함'으로 predict 했을때 PC를 다시 target address로
+			else {
+				if_id_i += 4; //prediction을 bracnh '함'으로 predict 했을때 정상적으로 PC+4
+			}
+
+			if (BTB_table[i].twobit_counter != 3){
+				BTB_table[i].twobit_counter++;
+			}
+		}//branch인데 condition을 만족할 때(taken)
+	}
+	else if_id_i->PC += 4;
 }
 
 void Instruction_Decode(IF_ID* if_id, ID_EX* id_ex){
 	int inst = if_id->instruction;
 	int opcode, rs, rt, rd, shamt, funct = 0;
-	int immediate=0;
-	int address=0;
+	int immediate = 0;
+	int address = 0;
 
 	id_ex->PC = if_id->PC;
 
-	opcode = ((inst)&0xFC000000)>>26;
-	rs = ((inst)&0x03E00000)>>21;
-	rt = ((inst)&0x001F0000)>>16;
-	rd = ((inst)&0x0000F800)>>11;
-	shamt = ((inst)&0x000007C0)>>6;
-	funct = ((inst)&0x0000003F);
-	immediate = ((inst)&0x0000FFFF);
-	address = ((inst)&0x03FFFFFF);
+	opcode = ((inst)& 0xFC000000) >> 26;
+	rs = ((inst)& 0x03E00000) >> 21;
+	rt = ((inst)& 0x001F0000) >> 16;
+	rd = ((inst)& 0x0000F800) >> 11;
+	shamt = ((inst)& 0x000007C0) >> 6;
+	funct = ((inst)& 0x0000003F);
+	immediate = ((inst)& 0x0000FFFF);
+	address = ((inst)& 0x03FFFFFF);
 
 
 	/////////////Control
-	if(opcode == 0){
+	if (opcode == 0){
+		id_ex->ALUSrc = 0;
 		id_ex->RegWrite = 1;
 		id_ex->branch = 0;
-		id_ex->RegWrite = 0;
+		id_ex->MemWrite = 0;
 		id_ex->MemRead = 0;
 		id_ex->MemtoReg = 0;
+		id_ex->RegDst = 0;
 		id_ex->jump = 0;
 		id_ex->jr = 0;
 		id_ex->jal = 0;
 
 		if ((funct == 0x20) || (funct == 0x21) || (funct == 0x24) || (funct == 0x27) || (funct == 0x25) || (funct == 0x00)
-			|| (funct == 0x02) || (funct == 0x22) || (funct == 0x23) || (funct == 0x10) || (funct == 0x12)){
+			|| (funct == 0x02) || (funct == 0x22) || (funct == 0x23) || (funct == 0x10) || (funct == 0x12) || (opcode == 0x2a) || (opcode == 0x2b)){
 			id_ex->RegDst = 1; //rd
 		}
 		else if (funct == 0x08){ //Jump_Register
+			id_ex->ALUSrc = 0;
 			id_ex->jr = 1;
 			id_ex->jump = 0;
 			id_ex->RegWrite = 0;
@@ -279,36 +367,112 @@ void Instruction_Decode(IF_ID* if_id, ID_EX* id_ex){
 			id_ex->RegDst = 0;
 			id_ex->MemtoReg = 0;
 			id_ex->jal = 0;
-			printf("jr\n");
+		}
+		else if ((rs == 0)&(rt == 0)&(rd == 0)&(shamt == 0)&(funct == 0)){ //nop
+			id_ex->ALUSrc = 0;
+			id_ex->RegWrite = 0;
+			id_ex->branch = 0;
+			id_ex->RegWrite = 0;
+			id_ex->RegDst = 0;
+			id_ex->MemRead = 0;
+			id_ex->MemtoReg = 0;
+			id_ex->jump = 0;
+			id_ex->jr = 0;
+			id_ex->jal = 0;
+			printf("nop\n");
 		}
 	}
-	else if ((opcode == Load_Word) || (opcode == Load_Byte_Unsigned) || (opcode == Load_FP) || (opcode == Load_FP_Single) || (opcode == Load_Linked)){
-//		id_ex->ALUSrc = 1;
-		id_ex->MemRead = 1;
-		id_ex->RegWrite = 1; 
+	else if ((opcode == Add_Immediate) || ((opcode == Add_Imm_Unsigned)&(rs != 0))){
+		id_ex->ALUSrc = 1;
+		id_ex->MemRead = 0;
+		id_ex->RegWrite = 1;
 		id_ex->RegDst = 0;
 		id_ex->branch = 0;
-		id_ex->MemWrite= 0;
+		id_ex->MemWrite = 0;
 		id_ex->MemtoReg = 0;
 		id_ex->jump = 0;
 		id_ex->jr = 0;
 		id_ex->jal = 0;
 	}
-	else if (opcode == Load_Upper_Imm){
-//		id_ex->ALUSrc = 1;
+	else if ((opcode == And_Immediate)){
+		id_ex->ALUSrc = 1;
+		id_ex->MemRead = 0;
 		id_ex->RegWrite = 1;
-		id_ex->MemtoReg = 1;
 		id_ex->RegDst = 0;
 		id_ex->branch = 0;
+		id_ex->MemWrite = 0;
+		id_ex->MemtoReg = 0;
+		id_ex->jump = 0;
+		id_ex->jr = 0;
+		id_ex->jal = 0;
+	}
+	else if (opcode == Or_Immediate){
+		id_ex->ALUSrc = 1;
+		id_ex->MemRead = 0;
+		id_ex->RegWrite = 1;
+		id_ex->RegDst = 0;
+		id_ex->branch = 0;
+		id_ex->MemWrite = 0;
+		id_ex->MemtoReg = 0;
+		id_ex->jump = 0;
+		id_ex->jr = 0;
+		id_ex->jal = 0;
+	}
+	else if ((opcode == Set_Less_Than_Imm) || (opcode == Set_Less_Than_Imm_Unsigned)){
+		id_ex->ALUSrc = 1;
+		id_ex->MemRead = 0;
+		id_ex->RegWrite = 1;
+		id_ex->RegDst = 0;
+		id_ex->branch = 0;
+		id_ex->MemWrite = 0;
+		id_ex->MemtoReg = 0;
+		id_ex->jump = 0;
+		id_ex->jr = 0;
+		id_ex->jal = 0;
+	}
+	else if ((opcode == Load_Word) || (opcode == Load_Byte_Unsigned) || (opcode == Load_FP) || (opcode == Load_FP_Single) || (opcode == Load_Linked)){
+		id_ex->ALUSrc = 1;
+		id_ex->MemRead = 1;
+		id_ex->RegWrite = 1;  
+		id_ex->RegDst = 0;
+		id_ex->branch = 0;
+		id_ex->MemWrite= 0;
+		id_ex->MemtoReg = 1;
+		id_ex->jump = 0;
+		id_ex->jr = 0;
+		id_ex->jal = 0;
+	}
+	else if (opcode == Load_Upper_Imm){
+		id_ex->ALUSrc = 1;
+		id_ex->RegWrite = 1;
+		id_ex->MemtoReg = 1;
+		id_ex->MemRead = 0;
+		id_ex->RegDst = 0;
+		id_ex->branch = 0;
+		id_ex->MemWrite = 0;
+		id_ex->MemtoReg = 1;
+		id_ex->jump = 0;
+		id_ex->jr = 0;
+		id_ex->jal = 0;
+	}
+	else if ((opcode == Add_Imm_Unsigned)&(rs == 0)){ //Load_immediate
+		id_ex->ALUSrc = 1;
+		id_ex->RegWrite = 1;
+		id_ex->MemtoReg = 0;
+		id_ex->RegDst = 0;
+		id_ex->branch = 0;
+		id_ex->MemWrite = 0;
+		id_ex->MemRead = 0;
 		id_ex->MemtoReg = 0;
 		id_ex->jump = 0;
 		id_ex->jr = 0;
 		id_ex->jal = 0;
 	}
 	else if ((opcode == Store_Word) || (opcode == Store_Byte) || (opcode == Store_Conditional) || (opcode == Store_FP) || (opcode == Store_FP_Single) || (opcode == Store_Halfword)){
-//		id_ex->ALUSrc = 1;
+		id_ex->ALUSrc = 1;
 		id_ex->MemWrite = 1;
 		id_ex->MemRead = 0;
+		id_ex->RegWrite = 0;
 		id_ex->RegDst = 0;
 		id_ex->branch = 0;
 		id_ex->MemtoReg = 0;
@@ -316,7 +480,8 @@ void Instruction_Decode(IF_ID* if_id, ID_EX* id_ex){
 		id_ex->jr = 0;
 		id_ex->jal = 0;
 	}
-	else if ((opcode == Branch_On_Equal) || (opcode == Branch_On_Not_Equal) || (opcode == Branch_On_Not_Equal_Zero)){
+	else if (((opcode == Branch_On_Equal)) || (opcode == Branch_On_Not_Equal) || (opcode == Branch_On_Not_Equal_Zero)){
+		id_ex->ALUSrc = 1;
 		id_ex->branch = 1;
 		id_ex->MemWrite = 0;
 		id_ex->MemRead = 0;
@@ -328,6 +493,7 @@ void Instruction_Decode(IF_ID* if_id, ID_EX* id_ex){
 		id_ex->jal = 0;
 	}
 	else if ((opcode == Jump)){
+		id_ex->ALUSrc = 0;
 		id_ex->jump = 1;
 		id_ex->branch = 0;
 		id_ex->MemWrite = 0;
@@ -339,6 +505,7 @@ void Instruction_Decode(IF_ID* if_id, ID_EX* id_ex){
 		id_ex->jal = 0;
 	}
 	else if (opcode == Jump_And_Link){
+		id_ex->ALUSrc = 0;
 		id_ex->RegWrite = 1;
 		id_ex->jal = 1;
 		id_ex->jump = 0;
@@ -349,12 +516,9 @@ void Instruction_Decode(IF_ID* if_id, ID_EX* id_ex){
 		id_ex->MemtoReg = 0;
 		id_ex->jr = 0;
 	}
-
-	//id_ex->opcode = opcode;
 	id_ex->ALUop = opcode;
 	id_ex->rs_data = reg[rs];
 	id_ex->rt_data = reg[rt];
-	id_ex->r31_data = reg[31];
 	id_ex->immediate = immediate;
 	id_ex->SignExt = SignExtImm(immediate);
 	id_ex->rt_address = rt;
@@ -366,10 +530,49 @@ void Instruction_Decode(IF_ID* if_id, ID_EX* id_ex){
 }
 
 
+void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem_i, MEM_WB* mem_wb_o, MEM_WB* mem_wb_i, EX_MEM* ex_mem_o){
 
+	////////////////Data Dependency _forwarding
+	if (id_ex->rs_address == mem_wb_o->address){  //rs
+		if (mem_wb_o->RegWrite == 1){
+			if (mem_wb_o->MemtoReg == 1){
+				id_ex->rs_data = mem_wb_o->Mem_data;
+			}
+			else{
+				id_ex->rs_data = mem_wb_o->ALU_result;
+			}
+		}
+	}
 
+	if (id_ex->rs_address == ex_mem_o->address){
+		if (ex_mem_o->RegWrite == 1){
+			if (ex_mem_o->MemtoReg ==1){
+				id_ex->rs_data = mem_wb_i->Mem_data;
+			}
+			else id_ex->rs_data = ex_mem_i->ALU_result;
+		}
+	}
 
-void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem_i, MEM_WB* mem_wb, EX_MEM* ex_mem_o){
+	if (mem_wb_o->ALUSrc == 0){//rt
+		if (id_ex->rt_address == mem_wb_o->address){
+			if (mem_wb_o->RegWrite == 1){
+				if (mem_wb_o->MemtoReg == 1){
+					id_ex->rt_data = mem_wb_o->Mem_data;
+				}
+				else id_ex->rt_data = mem_wb_o->ALU_result;
+			}
+		}
+	}
+
+	if (ex_mem_o->ALUSrc == 0){
+		if (id_ex->rt_address == ex_mem_o->address){
+			if (ex_mem_o->RegWrite == 1){
+				if (ex_mem_o->MemtoReg == 1){
+					id_ex->rt_data = mem_wb_i->Mem_data;
+				}else id_ex->rt_data = mem_wb_i->ALU_result;
+			}
+		}
+	}
 
 	/////////////데이터 전달하는 부분
 	ex_mem_i->PC = id_ex->PC;
@@ -382,53 +585,27 @@ void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem_i, MEM_WB* mem_wb, EX_ME
 	}
 	else ex_mem_i->address = id_ex->rt_address;
 
-	////////////////Data Dependency _forwarding
-	if (id_ex->rs_address == mem_wb->address){  //rs
-		if (mem_wb->MemtoReg == 1){
-			id_ex->rs_data = mem_wb->Mem_data;
-		}
-		else{
-			id_ex->rs_data = mem_wb->ALU_result;
-		}
-	}
-	else if (id_ex->rs_address == ex_mem_o->address){
-		id_ex->rs_data = ex_mem_o->ALU_result;
-	}
-
-	if (id_ex->rt_address == mem_wb->address){  //rt
-		if (mem_wb->MemtoReg == 1){
-			id_ex->rt_data = mem_wb->Mem_data;
-		}
-		else{
-			id_ex->rt_data = mem_wb->ALU_result;
-		}
-	}
-	else if (id_ex->rt_address == ex_mem_o){
-		id_ex->rt_data = ex_mem_o->ALU_result;
-	}
-
 	switch (id_ex->ALUop){
 	case 0x00:
 		switch (id_ex->func){
 		case 0x20:
 			ex_mem_i->ALU_result = id_ex->rs_data + id_ex->rt_data;  //Add
 			break;
-		case 0x21: 
+		case 0x21:
 			if (id_ex->rt_address == 0){
 				ex_mem_i->ALU_result = id_ex->rs_data; //Move
-				printf("move\n");
+				printf("%x move\n", ex_mem_i->PC);
 			}
 			else {
 				ex_mem_i->ALU_result = id_ex->rs_data + id_ex->rt_data; //Add Unsigned
-				printf("addu\n");
+				printf("%x addu\n", ex_mem_i->PC);
 			}
 			break;
 		case 0x24:
 			ex_mem_i->ALU_result = id_ex->rs_data & id_ex->rt_data;  //And
 			break;
 		case 0x08:
-//			PC = reg[rs];	Fetch 단계에서..  //Jump_Regster
-			printf("jr\n");
+			printf("%x jr\n", ex_mem_i->PC);
 			break;
 		case 0x27:
 			ex_mem_i->ALU_result = ~(id_ex->rs_data | id_ex->rt_data); //Nor
@@ -441,7 +618,6 @@ void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem_i, MEM_WB* mem_wb, EX_ME
 			break;
 		case 0x2b:
 			ex_mem_i->rt_data = (id_ex->rs_data < id_ex->SignExt) ? 1 : 0; // Set_Less_Than_Imm_Unsigned
-//			ALUSrc = 1;
 			break;
 		case 0x00:
 			ex_mem_i->ALU_result = id_ex->rt_data << id_ex->sh; //Shift_Left_Logical
@@ -469,145 +645,147 @@ void Instruction_Execution(ID_EX* id_ex, EX_MEM* ex_mem_i, MEM_WB* mem_wb, EX_ME
 			Hi = ((id_ex->rs_data * id_ex->rt_data) & 0xFFFFFFFF00000000) >> 32; //Multiply_Unsigned
 			Lo = ((id_ex->rs_data * id_ex->rt_data) & 0x00000000FFFFFFFF);
 			break;
-//		case 0x03:
-//			ex_mem_i->ALU_result = id_ex->rt_data >>> id_ex->sh; //Shift_Right_Arith
-//			ex_mem_i->address = id_ex->rd_address;
+			//		case 0x03:
+			//			ex_mem_i->ALU_result = id_ex->rt_data >>> id_ex->sh; //Shift_Right_Arith
+			//			ex_mem_i->address = id_ex->rd_address;
 		}
 		break;
 	case Add_Immediate:
-		ex_mem_i->rt_data = id_ex->rs_data & id_ex->SignExt;
+		ex_mem_i->ALU_result = id_ex->rs_data + id_ex->SignExt;
 		break;
 	case 0x09:
 		if (id_ex->rs_address != 0){
-			ex_mem_i->rt_data = id_ex->rs_data & id_ex->SignExt; //Add_imm_Unsigned
-//			ALUSrc = 1;
-			printf("addiu\n");
-
+			ex_mem_i->ALU_result = id_ex->rs_data + id_ex->SignExt; //Add_imm_Unsigned
+			printf("%x addiu\n", ex_mem_i->PC);
 		}
 		else{
-			ex_mem_i->rt_data = id_ex->immediate; //Load_Immediate
-//			ALUSrc = 1;
+			ex_mem_i->ALU_result = id_ex->immediate; //Load_Immediate
+			printf("%x li\n", ex_mem_i->PC);
 		}
 		break;
 	case And_Immediate:
-		ex_mem_i->rt_data = id_ex->rs_data & id_ex->immediate;
-//		ALUSrc = 1;
-
+		ex_mem_i->ALU_result = id_ex->rs_data & id_ex->immediate;
 		break;
 	case Branch_On_Equal:
-		if (id_ex->rs_data == id_ex->rt_data){
-//			ex_mem_i->PC = ex_mem_i->PC + 1 + (id_ex->SignExt / 4);		Fetch 단계에서..
-			ex_mem_i->bcond = 1;
+		if (id_ex->rt_address != 0){//Branch_On_Equal
+			if (id_ex->rs_data == id_ex->rt_data){
+				ex_mem_i->bcond = 1;
+			}
+			else ex_mem_i->bcond = 0;
+		}
+		else{//Branch_On_Equal_Zero
+			if (id_ex->rs_data == 0){
+				ex_mem_i->bcond = 1;
+			}
+			else{
+				ex_mem_i->bcond = 0;
+			}
+			printf("%x beqz\n", ex_mem_i->PC);
 		}
 		break;
 	case 0x5:
 		if (id_ex->rt_address != 0){
 			if (id_ex->rs_data != id_ex->rt_data){ //Branch_On_Not_Equal
-				if (id_ex->rs_data != id_ex->rt_data){
-					ex_mem_i->bcond = 1;
-				}
-//				ex_mem_i->PC = ex_mem_i->PC + 1 + (id_ex->SignExt / 4);		Fetch 단계에서..
-			}
-		}
-		else if (id_ex->rs_address != 0){ //Branch_On_Not_Equal_Zero
-//			ex_mem_i->PC = ex_mem_i->PC + 1 + (id_ex->SignExt / 4);		Fetch 단계에서..
-			if (id_ex->rs_data != 0){
 				ex_mem_i->bcond = 1;
 			}
-			printf("bnez\n");
+			else ex_mem_i->bcond = 0;
+			printf("%x bne\n", ex_mem_i->PC);
+		}
+		else if (id_ex->rs_address != 0){ //Branch_On_Not_Equal_Zero
+			if (id_ex->rs_data != 0){
+				ex_mem_i->bcond = 1;
+			}else ex_mem_i->bcond = 0;
+			printf("%x bnez\n", ex_mem_i->PC);
 		}
 		break;
 	case Jump:
-		printf("j\n");
+		printf("%x j\n", ex_mem_i->PC);
 		break;
 	case Jump_And_Link:
-		//ex_mem_i->PC + 2 =id_ex->r31_data; Fetch 단계에서..
+		printf("%x jal\n", ex_mem_i->PC);
 		break;
 	case Load_Halfword_Unsigned:
 		ex_mem_i->ALU_result = id_ex->rs_data + id_ex->SignExt;
-//		ALUSrc = 1;
-//		reg[rt] = Mem[(reg[rs] + SignExtImm(imm))];    Memory 단계에서..
 		break;
 	case Load_Linked:
 		ex_mem_i->ALU_result = id_ex->rs_data + id_ex->SignExt;
-//		ALUSrc = 1;
-//		reg[rt] = Mem[(reg[rs] + SignExtImm(imm))];    Memory 단계에서..
 		break;
 	case Load_Upper_Imm:
 		ex_mem_i->ALU_result = id_ex->SignExt >> 16;
-//		ALUSrc = 1;
 		break;
 	case Load_Word:
 		ex_mem_i->ALU_result = id_ex->rs_data + id_ex->SignExt;
-//		ALUSrc = 1;
-		printf("lw\n");
-//		reg[rt] = Mem[(reg[rs] + SignExtImm(imm))];	Memory 단계에서..
+		printf("%x lw\n", ex_mem_i->PC);
 		break;
 	case Or_Immediate:
 		ex_mem_i->ALU_result = id_ex->rs_data | id_ex->immediate;
-//		ALUSrc = 1;
 		break;
 	case Set_Less_Than_Imm:
-		ex_mem_i->ALU_result = (id_ex->rs_data < id_ex->SignExt) ? 1 : 0;
-		printf("slti\n");
-//		ALUSrc = 1;
+		if (id_ex->rs_data < id_ex->SignExt){
+			ex_mem_i->ALU_result = 1;
+		}
+		else ex_mem_i->ALU_result = 0;
+//		ex_mem_i->ALU_result = (id_ex->rs_data < id_ex->SignExt) ? 1 : 0;
+		printf("%x slti\n", ex_mem_i->PC);
 		break;
 	case Set_Less_Than_Imm_Unsigned:
 		ex_mem_i->ALU_result = (id_ex->rs_data < id_ex->SignExt) ? 1 : 0;
-//		ALUSrc = 1;
 		break;
 	case Store_Conditional:
-		//Mem[(reg[rs] + SignExtImm(imm)) / 4] = reg[rt];
-		//reg[rt] = (atomic) ? 1 : 0;
-		//ALUSrc = 1;
+		ex_mem_i->ALU_result = id_ex->rs_data + id_ex->SignExt;
 		break;
 	case Store_Halfword:
-		//Mem[(reg[rs] + SignExtImm(imm)) / 4] = reg[rt];
-		//ALUSrc = 1;
+		ex_mem_i->ALU_result = id_ex->rs_data + id_ex->SignExt;
 		break;
 	case Store_Word:
 		ex_mem_i->ALU_result = id_ex->rs_data + id_ex->SignExt;
-//		ALUSrc = 1;
-		printf("sw\n");
-//		Mem[(reg[rs] + SignExtImm(imm))/4] = reg[rt]; Memory 단계에서..
+		printf("%x sw\n", ex_mem_i->PC);
 		break;
 	}
 
 	////////////////control
-	ex_mem_i->PCSrc = (id_ex->branch) & (ex_mem_i->bcond);
+	ex_mem_i->ALUSrc = id_ex->ALUSrc;
 	ex_mem_i->branch = id_ex->branch;
 	ex_mem_i->MemWrite = id_ex->MemWrite;
 	ex_mem_i->MemRead = id_ex->MemRead;
 	ex_mem_i->RegWrite = id_ex->RegWrite;
 	ex_mem_i->MemtoReg = id_ex->MemtoReg;
+	ex_mem_i->jal = id_ex->jal;
 }
 
 void Memory(EX_MEM* ex_mem, MEM_WB* mem_wb){
 	
 	mem_wb->PC = ex_mem->PC;
 	mem_wb->address = ex_mem->address;
+	mem_wb->ALU_result = ex_mem->ALU_result;
 
 	//control
+	mem_wb->ALUSrc = ex_mem->ALUSrc;
 	mem_wb->MemtoReg = ex_mem->MemtoReg;
 	mem_wb->RegWrite = ex_mem->RegWrite;
+	mem_wb->jal = ex_mem->jal;
 
 	if (ex_mem->MemWrite == 1){
-		Mem[ex_mem->ALU_result] = ex_mem->rt_data;
-	}
-	
-	if (ex_mem->MemRead == 1){
-		mem_wb->Mem_data = Mem[ex_mem->ALU_result];
+		Mem[(ex_mem->ALU_result)/4] = ex_mem->rt_data;
+		mem_wb->Mem_data = ex_mem->rt_data;
+	}else if (ex_mem->MemRead == 1){
+		mem_wb->Mem_data = Mem[(ex_mem->ALU_result)/4];
 	}
 }
 
 void Write_Back(MEM_WB* mem_wb){	
 	if (mem_wb->MemtoReg == 1){
-		reg[mem_wb->address] = mem_wb->Mem_data;
+		if (mem_wb->RegWrite == 1){
+			reg[mem_wb->address] = mem_wb->Mem_data;
+		}
 	}
 	else{
 		if (mem_wb->RegWrite == 1){
-			reg[mem_wb->address] = mem_wb->ALU_result;
+			if (mem_wb->jal == 1){
+				reg[31] = (mem_wb->PC) + 4;
+			}else{
+				reg[mem_wb->address] = mem_wb->ALU_result;
+			}
 		}
 	}
-
 }

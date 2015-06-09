@@ -39,6 +39,7 @@ typedef struct EX_MEM{
 	int rs_data; //jr 
 	int rt_data;
 	int address;
+	int rt_address;
 	//CONTROL
 	int ALUSrc; //forwarding È®ÀÎ¿ë
 	int branch;
@@ -70,6 +71,13 @@ typedef struct BTB{
 	int jal;
 }BTB;
 
+typedef struct CASHE{
+	int sca;
+	int dirty;
+	int valid;
+	int tag;
+	int data[16];
+}CASHE;
 
 
 int SignExtImm(int imm);
